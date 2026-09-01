@@ -23,10 +23,10 @@ request can take up to a minute.>
 
 | Layer | What you used | Why |
 |-------|---------------|-----|
-| Frontend | | |
-| Backend | | |
-| Database | | |
-| Hosting | | |
+| Frontend | Vue 3 CDN| It is easy to use and I am familiar with it |
+| Backend | Flask Rest API| It is easy to use and I am familiar with it |
+| Database | PostgreSQL| It is a relational database and I am familiar with it |
+| Hosting |  Railway / Supabase | It is a free tier hosting platform and I am familiar with it |
 
 ## Goal checklist
 
