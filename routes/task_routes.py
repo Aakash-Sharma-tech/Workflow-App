@@ -29,16 +29,11 @@ def tasks(project_id):
         created_by=session["user_id"],
     )
     db.session.add(task)
-    db.session.commit()
+    db.session.flush()  # get task.id
 
-    # Log creation in history
-    history = TaskHistoryModel(
-        task_id=task.id,
-        user_id=session["user_id"],
-        action="created"
-    )
+    history = TaskHistoryModel(task_id=task.id, user_id=session["user_id"], action="created")
     db.session.add(history)
-    db.session.commit()
+    db.session.commit()  # task + history in one transaction
 
     flash("Task created", "success")
     return redirect(url_for("task.tasks", project_id=project_id))

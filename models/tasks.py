@@ -18,6 +18,7 @@ class TaskModel(db.Model):
     )
     due_date = db.Column(db.DateTime, nullable=True)
     blocked_from_status = db.Column(db.String(20), nullable=True)  # stores previous status when task is Blocked
+    completed_at = db.Column(db.DateTime, nullable=True)           # set when status → Done; cleared on reopen
     created_at = db.Column(db.DateTime, nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False)
 
@@ -55,6 +56,7 @@ class TaskModel(db.Model):
         self.created_by = created_by
         self.priority = priority
         self.due_date = due_date
+        self.completed_at = None
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
 
