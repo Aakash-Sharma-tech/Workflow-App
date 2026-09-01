@@ -12,7 +12,7 @@ class UserModel(db.Model):
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # MANAGER / MEMBER
+    role = db.Column(db.Enum("MANAGER", "MEMBER"), nullable=False,default="MEMBER")
     created_at = db.Column(db.DateTime, nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False)
 
@@ -20,7 +20,7 @@ class UserModel(db.Model):
     # User owns many projects (as manager/owner)
     projects_owned = db.relationship("ProjectModel", backref="owner", lazy=True)
 
-    def __init__(self, username, email, first_name, last_name, password, role):
+    def __init__(self, username, email, first_name, last_name, password, role="MEMBER"):
         self.username = username
         self.email = email
         self.first_name = first_name

@@ -28,4 +28,4 @@ class TaskHistoryModel(db.Model):
         self.created_at = datetime.now()
 
     def __repr__(self):
-        return f"<TaskHistoryModel task={self.task_id} action={self.action}>"
+        return f"<TaskHistoryModel task={self.task_id} action={self.action}>"   
