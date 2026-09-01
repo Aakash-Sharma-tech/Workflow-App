@@ -11,9 +11,9 @@ class ProjectMemberModel(db.Model):
     joined_at = db.Column(db.DateTime, nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False)
 
-    # many-to-one back to user — backref gives UserModel.memberships
+    # many-to-one back to user — backref "memberships" on UserModel
+    # "project" backref is created by ProjectModel.members (defined in projects.py)
     user = db.relationship("UserModel", backref="memberships", lazy=True)
-    # project backref is created by ProjectModel.members
 
     def __init__(self, project_id, user_id):
         self.project_id = project_id
