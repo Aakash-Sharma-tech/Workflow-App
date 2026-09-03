@@ -9,6 +9,8 @@ from services.project_membership_service import get_user_project_ids
 
 def _base_query(user):
     project_ids = get_user_project_ids(user)
+    if not project_ids:
+        return TaskModel.query.filter(db.false())
     return TaskModel.query.filter(TaskModel.project_id.in_(project_ids))
 
 
@@ -52,6 +54,8 @@ def datetime_combine(d):
 
 def get_status_breakdown(user):
     project_ids = get_user_project_ids(user)
+    if not project_ids:
+        return {}
     rows = (
         db.session.query(TaskModel.status, func.count(TaskModel.id))
         .filter(TaskModel.project_id.in_(project_ids))
@@ -63,6 +67,8 @@ def get_status_breakdown(user):
 
 def get_assignee_breakdown(user):
     project_ids = get_user_project_ids(user)
+    if not project_ids:
+        return []
     rows = (
         db.session.query(UserModel.name, func.count(TaskModel.id))
         .join(TaskAssigneeModel, TaskAssigneeModel.user_id == UserModel.id)
