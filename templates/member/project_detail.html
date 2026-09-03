@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Workflow{% endblock %}
+{% block content %}
+<div id="project-app">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('projects.list_projects') }}">Projects</a></li>
+            <li class="breadcrumb-item active">{{ project.key }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+        <div>
+            <h2>{{ project.name }} <span class="badge bg-secondary">{{ project.key }}</span></h2>
+            <p class="text-muted">{{ project.description or '' }}</p>
+            <small class="text-muted">Owner: {{ project.owner.name }}</small>
+        </div>
+        <button class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#taskModal">
+            <i class="fas fa-plus me-1"></i> New Task
+        </button>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">Tasks</div>
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead><tr><th>Title</th><th>Status</th><th>Priority</th><th>Due</th><th>Assignees</th></tr></thead>
+                        <tbody>
+                        {% for t in project.tasks %}
+                        <tr class="{% if t.is_overdue %}overdue-row{% endif %}">
+                            <td><a href="{{ url_for('tasks.task_detail', task_id=t.id) }}">{{ t.title }}</a></td>
+                            <td><span class="badge" data-status="{{ t.status }}">{{ t.status }}</span></td>
+                            <td><span class="badge" data-priority="{{ t.priority }}">{{ t.priority }}</span></td>
+                            <td>{{ t.due_date.strftime('%b %d, %Y') if t.due_date else '—' }}</td>
+                            <td>{% for a in t.assignees %}{{ a.user.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% if not t.assignees %}—{% endif %}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-muted text-center py-4">No tasks yet.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">Team</div>
+                <ul class="list-group list-group-flush">
+                    {% for m in members %}
+                    <li class="list-group-item">{{ m.name }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="taskModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input v-model="taskForm.title" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea v-model="taskForm.description" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Priority</label>
+                            <select v-model="taskForm.priority" class="form-select">
+                                <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+                            </select>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Due date</label>
+                            <input type="date" v-model="taskForm.due_date" class="form-control">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Assignees</label>
+                        <select v-model="taskForm.assignee_ids" class="form-select" multiple>
+                            {% for m in members %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div v-if="taskError" v-cloak class="alert alert-danger mb-0">[[ taskError ]]</div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-gold" @click="createTask">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const { createApp } = Vue;
+createApp({
+    delimiters: ['[[', ']]'],
+    data() {
+        return { taskForm: { title: '', description: '', priority: 'Medium', due_date: '', assignee_ids: [] }, taskError: '' };
+    },
+    methods: {
+        async createTask() {
+            this.taskError = '';
+            try {
+                const ids = Array.isArray(this.taskForm.assignee_ids)
+                    ? this.taskForm.assignee_ids.map(Number)
+                    : [Number(this.taskForm.assignee_ids)].filter(Boolean);
+                await api.post('/api/projects/{{ project.id }}/tasks', { ...this.taskForm, assignee_ids: ids });
+                location.reload();
+            } catch (e) { this.taskError = e.message; }
+        }
+    }
+}).mount('#project-app');
+</script>
+{% endblock %}

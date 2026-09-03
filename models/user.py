@@ -1,34 +1,24 @@
-from models import db
-from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+from models import db
 
 
 class UserModel(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    first_name = db.Column(db.String(100), nullable=False)
-    last_name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.Enum("MANAGER", "MEMBER"), nullable=False,default="MEMBER")
-    created_at = db.Column(db.DateTime, nullable=False)
-    updated_at = db.Column(db.DateTime, nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="member")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationships — defined on the "one" side; backref creates reverse accessor
-    # User owns many projects (as manager/owner)
-    projects_owned = db.relationship("ProjectModel", backref="owner", lazy=True)
-
-    def __init__(self, username, email, first_name, last_name, password, role="MEMBER"):
-        self.username = username
-        self.email = email
-        self.first_name = first_name
-        self.last_name = last_name
-        self.password_hash = generate_password_hash(password)
-        self.role = role
-        self.created_at = datetime.now()
-        self.updated_at = datetime.now()
+    owned_projects = db.relationship("ProjectModel", back_populates="owner", foreign_keys="ProjectModel.owner_id")
+    memberships = db.relationship("ProjectMemberModel", back_populates="user", cascade="all, delete-orphan")
+    assignments = db.relationship("TaskAssigneeModel", back_populates="user", cascade="all, delete-orphan")
+    comments = db.relationship("CommentModel", back_populates="user")
+    history_entries = db.relationship("TaskHistoryModel", back_populates="user")
+    alerts = db.relationship("AlertModel", back_populates="user", cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -36,5 +26,14 @@ class UserModel(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-    def __repr__(self):
-        return f'<UserModel {self.username}>'
+    @property
+    def is_manager(self):
+        return self.role == "manager"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "role": self.role,
+        }

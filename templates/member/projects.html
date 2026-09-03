@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Projects — Workflow{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Projects</h2>
+</div>
+<div class="row g-3">
+    {% for p in projects %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <span class="badge bg-secondary">{{ p.key }}</span>
+                <h5 class="mt-2"><a href="{{ url_for('projects.view_project', project_id=p.id) }}" class="text-decoration-none text-dark">{{ p.name }}</a></h5>
+                <p class="text-muted small">{{ (p.description or '')[:120] }}{% if p.description and p.description|length > 120 %}…{% endif %}</p>
+                <div class="small text-muted">
+                    <i class="fas fa-user me-1"></i>{{ p.owner.name }}
+                    &middot; {{ p.tasks|length }} tasks
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12"><p class="text-muted">You are not assigned to any projects yet.</p></div>
+    {% endfor %}
+</div>
+{% endblock %}

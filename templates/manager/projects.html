@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Projects — Workflow{% endblock %}
+{% block content %}
+<div id="projects-app">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="mb-0">{% if show_archived %}Archived projects{% else %}Projects{% endif %}</h2>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('projects.list_projects') }}"
+               class="btn btn-sm {{ 'btn-gold' if not show_archived else 'btn-outline-secondary' }}">Active</a>
+            <a href="{{ url_for('projects.list_projects', archived='true') }}"
+               class="btn btn-sm {{ 'btn-gold' if show_archived else 'btn-outline-secondary' }}">Archived</a>
+            <button class="btn btn-gold btn-sm" data-bs-toggle="modal" data-bs-target="#createModal">
+                <i class="fas fa-plus me-1"></i> New Project
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        {% for p in projects %}
+        <div class="col-md-4">
+            <div class="card h-100 {% if p.archived %}opacity-75{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <span class="badge bg-secondary">{{ p.key }}</span>
+                        {% if p.archived %}<span class="badge bg-warning text-dark">Archived</span>{% endif %}
+                    </div>
+                    <h5 class="mt-2">
+                        <a href="{{ url_for('projects.view_project', project_id=p.id) }}" class="text-decoration-none text-dark">{{ p.name }}</a>
+                    </h5>
+                    <p class="text-muted small">{{ (p.description or '')[:120] }}{% if p.description and p.description|length > 120 %}…{% endif %}</p>
+                    <div class="small text-muted">
+                        <i class="fas fa-user me-1"></i>{{ p.owner.name }}
+                        &middot; {{ p.tasks|length }} tasks
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-0">
+                    {% if p.archived %}
+                    <button class="btn btn-sm btn-outline-success" @click="restoreProject({{ p.id }})">Restore</button>
+                    {% else %}
+                    <button class="btn btn-sm btn-outline-secondary" @click="archiveProject({{ p.id }})">Archive</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <p class="text-muted">{% if show_archived %}No archived projects.{% else %}No active projects yet.{% endif %}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="modal fade" id="createModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Project</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Key</label>
+                        <input v-model="form.key" class="form-control text-uppercase" maxlength="20" placeholder="e.g. WEB">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input v-model="form.name" class="form-control" placeholder="e.g. Website Redesign">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea v-model="form.description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div v-if="error" v-cloak class="alert alert-danger mb-0">[[ error ]]</div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-gold" @click="createProject" :disabled="loading">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const { createApp } = Vue;
+createApp({
+    delimiters: ['[[', ']]'],
+    data() {
+        return { form: { key: '', name: '', description: '' }, error: '', loading: false };
+    },
+    methods: {
+        async createProject() {
+            this.loading = true;
+            this.error = '';
+            try {
+                await api.post('/api/projects', this.form);
+                location.href = '{{ url_for("projects.list_projects") }}';
+            } catch (e) {
+                this.error = e.message;
+            }
+            this.loading = false;
+        },
+        async archiveProject(id) {
+            if (!confirm('Archive this project? Tasks stay in place but it drops out of the default list.')) return;
+            await api.post(`/api/projects/${id}/archive`, {});
+            location.reload();
+        },
+        async restoreProject(id) {
+            await api.post(`/api/projects/${id}/restore`, {});
+            location.reload();
+        }
+    }
+}).mount('#projects-app');
+</script>
+{% endblock %}

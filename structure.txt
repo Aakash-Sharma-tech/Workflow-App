@@ -1,0 +1,56 @@
+WORKFLOW - CURSOR/
+├── app.py                            # Flask application factory & entry point
+├── config.py                         # Environment & database configuration
+├── requirements.md          # Project requirements & specifications
+├── README.md                    
+│
+├── requirements.txt
+│
+├── models/                           # SQLAlchemy Database Models
+│   ├── __init__.py
+│   ├── alerts.py                     # AlertModel (overdue notifications)
+│   ├── comments.py                   # CommentModel (task comments)
+│   ├── project_members.py            # ProjectMemberModel (project-user association)
+│   ├── projects.py                   # ProjectModel
+│   ├── task_assignees.py             # TaskAssigneeModel (task-user association)
+│   ├── task_dependencies.py          # TaskDependencyModel (task blocking relationships)
+│   ├── task_history.py               # TaskHistoryModel (immutable audit log)
+│   ├── tasks.py                      # TaskModel
+│   └── user.py                       # UserModel (authentication & roles)
+│
+├── routes/                           # Flask Blueprints & HTTP Controllers
+│  
+│
+├── services/                         # Core Business Logic Layer
+│   ├── alert_service.py              # Alert generation & dismissal
+│   ├── assignees_services.py        # Task assignee operations
+│   ├── bulk_service.py               # Bulk action processor & validation
+│   ├── csv_service.py                # CSV export generator
+│   ├── dashboard_service.py          # Analytics & completion metrics calculation
+│   ├── dependencies_services.py     # Dependency rule validation
+│   ├── history_service.py            # Audit log recorder
+│   ├── project_membership_service.py # Member management logic
+│   ├── project_service.py            # Project management logic
+│   ├── task_state_macine.py          # Task lifecycle state machine & transition rules
+│   └── tasks_services.py             # Task mutation & query builder
+│
+├── static/                           # Client-side Static Assets
+│   ├── css/
+│   │   └── style.css                 # White & Golden design system CSS
+│   └── js/
+│       
+│
+├── templates/                        # Jinja2 HTML Templates with Embedded Vue 3 CDN
+│   ├── index.html                    # Project Demonstrating Page before authentication
+│   ├── login.html                    # Sign-in page
+│   ├── signup.html                   # Account registration page
+│   │
+│   ├── manager/                      # Manager Role Templates
+│   │
+│   └── member/                       # Member Role Templates
+│
+└── utils/
+    └── permission.py                 # @require_login & @require_role decorators
+
+
+You can Change the Structure

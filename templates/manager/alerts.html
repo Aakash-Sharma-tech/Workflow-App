@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Alerts — Workflow{% endblock %}
+{% block content %}
+<h2 class="mb-4">Overdue Alerts</h2>
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead><tr><th>Task</th><th>Project</th><th>Due Date</th><th></th></tr></thead>
+            <tbody>
+            {% for a in alerts %}
+            <tr>
+                <td><a href="{{ url_for('tasks.task_detail', task_id=a.task_id) }}">{{ a.task.title }}</a></td>
+                <td>{{ a.task.project.name }}</td>
+                <td class="text-danger">{{ a.task.due_date.strftime('%b %d, %Y') }}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="dismiss({{ a.id }})">Dismiss</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-4">No overdue alerts. You're all caught up!</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function dismiss(id) {
+    await api.post(`/api/alerts/${id}/dismiss`, {});
+    location.reload();
+}
+</script>
+{% endblock %}

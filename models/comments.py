@@ -1,5 +1,5 @@
-from models import db
 from datetime import datetime
+from models import db
 
 
 class CommentModel(db.Model):
@@ -8,18 +8,17 @@ class CommentModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    content = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    # many-to-one back to user — backref gives UserModel.comments
-    # task backref is created by TaskModel.comments
-    user = db.relationship("UserModel", backref="comments", lazy=True)
+    task = db.relationship("TaskModel", back_populates="comments")
+    user = db.relationship("UserModel", back_populates="comments")
 
-    def __init__(self, task_id, user_id, content):
-        self.task_id = task_id
-        self.user_id = user_id
-        self.content = content
-        self.created_at = datetime.now()
-
-    def __repr__(self):
-        return f"<CommentModel {self.id}>"
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "content": self.content,
+            "user_name": self.user.name if self.user else "Unknown",
+            "user_id": self.user_id,
+            "created_at": self.created_at.isoformat(),
+        }

@@ -1,121 +1,123 @@
-"""
-BulkTaskService — apply one action to many tasks.
-
-Design decision:
-    Normal update ──┐
-                    ├──> TaskStateMachine / TaskService methods
-    Bulk update ────┘
-
-We never duplicate business rules here. Bulk just iterates and delegates.
-Each task is handled independently so partial success is possible.
-
-Supported actions:
-    "status"   — value: str  (e.g. "Done", "Unblock")
-    "assignee" — value: int  (user_id to assign)
-    "due_date" — value: str  (ISO date "YYYY-MM-DD", or null to clear)
-"""
-
 from datetime import datetime, date
-from models.tasks import TaskModel
-from models.task_assignees import TaskAssigneeModel
+from sqlalchemy import or_, asc, desc
 from models import db
-from services.task_state_macine import TaskStateMachine
-import services.history_service as history_service
+from models.tasks import TaskModel, TASK_STATUSES, TASK_PRIORITIES
+from models.task_assignees import TaskAssigneeModel
+from models.projects import ProjectModel
+from services.project_membership_service import get_user_project_ids
+from services.tasks_services import transition_task, update_task
+from services.assignees_services import set_assignees
 
 
-class BulkTaskService:
+def build_task_query(user, params):
+    project_ids = get_user_project_ids(user, include_archived=params.get("include_archived", False))
+    if not project_ids:
+        return TaskModel.query.filter(TaskModel.id == -1)
+    q = TaskModel.query.filter(TaskModel.project_id.in_(project_ids))
 
-    @staticmethod
-    def apply(task_ids, action, value, acting_user_id):
-        """
-        Apply action to each task_id. Returns a list of per-task results.
+    search = params.get("search", "").strip()
+    if search:
+        pattern = f"%{search}%"
+        q = q.filter(or_(TaskModel.title.ilike(pattern), TaskModel.description.ilike(pattern)))
 
-        Result shape:
-            [
-                { "task_id": 1, "success": True },
-                { "task_id": 2, "success": False, "error": "..." },
-            ]
-        """
-        results = []
-
-        for task_id in task_ids:
-            try:
-                task = TaskModel.query.get(task_id)
-                if not task:
-                    results.append({"task_id": task_id, "success": False,
-                                    "error": "Task not found"})
-                    continue
-
-                if action == "status":
-                    ok, err = BulkTaskService._apply_status(task, value, acting_user_id)
-                elif action == "assignee":
-                    ok, err = BulkTaskService._apply_assignee(task, value, acting_user_id)
-                elif action == "due_date":
-                    ok, err = BulkTaskService._apply_due_date(task, value, acting_user_id)
-                else:
-                    ok, err = False, f"Unknown action '{action}'"
-
-                if ok:
-                    results.append({"task_id": task_id, "success": True})
-                else:
-                    results.append({"task_id": task_id, "success": False, "error": err})
-
-            except Exception as e:
-                db.session.rollback()
-                results.append({"task_id": task_id, "success": False, "error": str(e)})
-
-        return results
-
-    # ── Action handlers ───────────────────────────────────────────────────────
-
-    @staticmethod
-    def _apply_status(task, new_state, acting_user_id):
-        """Delegate to TaskStateMachine so business rules are never duplicated."""
-        return TaskStateMachine(task).change_state(new_state, acting_user_id)
-
-    @staticmethod
-    def _apply_assignee(task, user_id, acting_user_id):
+    if params.get("project_id"):
         try:
-            user_id = int(user_id)
+            q = q.filter(TaskModel.project_id == int(params["project_id"]))
         except (TypeError, ValueError):
-            return False, "Invalid user_id"
+            pass
 
-        existing = TaskAssigneeModel.query.filter_by(
-            task_id=task.id, user_id=user_id
-        ).first()
-        if existing:
-            return False, f"User {user_id} is already assigned"
+    if params.get("status"):
+        q = q.filter(TaskModel.status == params["status"])
 
-        assignee = TaskAssigneeModel(task_id=task.id, user_id=user_id)
-        db.session.add(assignee)
-        history_service.record(
-            db.session, task.id, acting_user_id,
-            action="assignee_added",
-            new_value=str(user_id),
+    if params.get("priority"):
+        q = q.filter(TaskModel.priority == params["priority"])
+
+    if params.get("assignee_id"):
+        try:
+            q = q.filter(TaskModel.assignees.any(user_id=int(params["assignee_id"])))
+        except (TypeError, ValueError):
+            pass
+
+    if params.get("overdue") == "true":
+        q = q.filter(
+            TaskModel.due_date.isnot(None),
+            TaskModel.due_date < date.today(),
+            TaskModel.status != "Done",
         )
-        db.session.commit()
-        return True, None
 
-    @staticmethod
-    def _apply_due_date(task, value, acting_user_id):
-        old = task.due_date
+    if params.get("my_tasks") == "true":
+        q = q.filter(TaskModel.assignees.any(user_id=user.id))
 
-        if value is None or value == "":
-            new_date = None
-        else:
-            try:
-                new_date = datetime.strptime(value, "%Y-%m-%d")
-            except ValueError:
-                return False, f"Invalid date format '{value}' — expected YYYY-MM-DD"
+    sort = params.get("sort", "updated_at")
+    order = params.get("order", "desc")
+    sort_map = {
+        "due_date": TaskModel.due_date,
+        "priority": TaskModel.priority,
+        "updated_at": TaskModel.updated_at,
+        "title": TaskModel.title,
+    }
+    col = sort_map.get(sort, TaskModel.updated_at)
+    q = q.order_by(asc(col) if order == "asc" else desc(col))
 
-        task.due_date = new_date
-        task.updated_at = datetime.now()
-        history_service.record(
-            db.session, task.id, acting_user_id,
-            action="due_date_changed",
-            field_name="due_date",
-            old_value=old.strftime("%Y-%m-%d") if old else None,
-            new_value=value,
-        )
-        db.session.commit()
-        return True, None
+    return q
+
+
+def paginate_tasks(user, params, per_page=15):
+    q = build_task_query(user, params)
+    try:
+        page = max(1, int(params.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    total = q.count()
+    tasks = q.offset((page - 1) * per_page).limit(per_page).all()
+    return {
+        "tasks": [t.to_dict() for t in tasks],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
+def process_bulk_action(user, task_ids, action, payload):
+    results = []
+    for tid in task_ids:
+        task = TaskModel.query.get(tid)
+        if not task:
+            results.append({"task_id": tid, "success": False, "error": "Task not found."})
+            continue
+
+        project_ids = get_user_project_ids(user)
+        if task.project_id not in project_ids:
+            results.append({"task_id": tid, "success": False, "error": "Access denied."})
+            continue
+
+        try:
+            if action == "status":
+                _, err = transition_task(task, payload["status"], user)
+                if err:
+                    results.append({"task_id": tid, "success": False, "error": err})
+                else:
+                    results.append({"task_id": tid, "success": True})
+
+            elif action == "assignee":
+                ok, err = set_assignees(task, payload.get("assignee_ids", []), user)
+                if not ok:
+                    results.append({"task_id": tid, "success": False, "error": err})
+                else:
+                    results.append({"task_id": tid, "success": True})
+
+            elif action == "due_date":
+                update_task(task, {"due_date": payload.get("due_date")}, user)
+                results.append({"task_id": tid, "success": True})
+
+            else:
+                results.append({"task_id": tid, "success": False, "error": "Unknown action."})
+        except Exception as e:
+            results.append({"task_id": tid, "success": False, "error": str(e)})
+
+    succeeded = sum(1 for r in results if r["success"])
+    return {
+        "results": results,
+        "summary": {"total": len(results), "succeeded": succeeded, "failed": len(results) - succeeded},
+    }

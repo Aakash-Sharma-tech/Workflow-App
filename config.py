@@ -1,16 +1,12 @@
 import os
-from dotenv import load_dotenv
 
-basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, '.env'))
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'aakash-sharma-busyinfotech-secret-key'
-    
-    # Adapt database URL for SQLAlchemy 1.4+ (Render uses postgres:// scheme)
-    uri = os.environ.get('DATABASE_URL') or os.environ.get('uri') or 'sqlite:///' + os.path.join(basedir, 'app.db')
-    if uri.startswith("postgres://"):
-        uri = uri.replace("postgres://", "postgresql://", 1)
-        
-    SQLALCHEMY_DATABASE_URI = uri
+    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'workflow.db')}"
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    TASKS_PER_PAGE = 15

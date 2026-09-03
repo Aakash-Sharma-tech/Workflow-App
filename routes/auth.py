@@ -1,98 +1,62 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session
-from models import db, UserModel
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, g
+from models import db
+from models.user import UserModel
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route('/login', methods=['GET', 'POST'])
+@auth_bp.route("/")
+def landing():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("index.html")
+
+
+@auth_bp.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'GET':
-        return render_template('login.html')
-
-    email = request.form.get('email')
-    password = request.form.get('password')
-    role = request.form.get('role')
-
-    if not email or not password or not role:
-        flash('Please fill in all fields', 'error')
-        return redirect(url_for('auth.login'))
-
-    if role == 'MANAGER':
-        user = UserModel.query.filter_by(email=email, role='MANAGER').first()
-    elif role == 'MEMBER':
-        user = UserModel.query.filter_by(email=email, role='MEMBER').first()
-    else:
-        flash('Invalid role selected.', 'error')
-        return redirect(url_for('auth.login'))
-
-    if user and user.check_password(password):
-        session['user_id'] = user.id
-        session['user_role'] = user.role
-        flash(f'{role.capitalize()} login successful', 'success')
-        if role == 'MANAGER':
-            return redirect(url_for('manager.dashboard'))
-        else:
-            return redirect(url_for('member.dashboard'))
-    else:
-        flash('Invalid email or password.', 'error')
-        return redirect(url_for('auth.login'))
+    if session.get("user_id"):
+        return redirect(url_for("dashboard.index"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        user = UserModel.query.filter_by(email=email).first()
+        if user and user.check_password(password):
+            session["user_id"] = user.id
+            session["user_name"] = user.name
+            session["user_role"] = user.role
+            return redirect(url_for("dashboard.index"))
+        flash("Invalid email or password.", "danger")
+    return render_template("login.html")
 
 
-@auth_bp.route('/signup', methods=['GET', 'POST'])
+@auth_bp.route("/signup", methods=["GET", "POST"])
 def signup():
-    if request.method == 'GET':
-        return render_template('signup.html')
-
-    username = request.form.get('username')
-    email = request.form.get('email')
-    first_name = request.form.get('first_name')
-    last_name = request.form.get('last_name')
-    password = request.form.get('password')
-    confirm_password = request.form.get('confirm_password')
-    role = request.form.get('role')
-
-    # Validate all fields are present
-    if not all([username, email, first_name, last_name, password, confirm_password, role]):
-        flash('Please fill in all fields', 'error')
-        return redirect(url_for('auth.signup'))
-
-    if password != confirm_password:
-        flash('Passwords do not match', 'error')
-        return redirect(url_for('auth.signup'))
-
-    if role not in ('MANAGER', 'MEMBER'):
-        flash('Invalid role selected.', 'error')
-        return redirect(url_for('auth.signup'))
-
-    existing_user = UserModel.query.filter(
-        (UserModel.username == username) | (UserModel.email == email)
-    ).first()
-
-    if existing_user:
-        flash('Username or email already exists', 'error')
-        return redirect(url_for('auth.signup'))
-
-    try:
-        new_user = UserModel(
-            username=username,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            password=password,
-            role=role
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        flash('Registration successful! Please log in.', 'success')
-        return redirect(url_for('auth.login'))
-    except Exception as e:
-        db.session.rollback()
-        flash('An error occurred during registration. Please try again.', 'error')
-        return redirect(url_for('auth.signup'))
+    if session.get("user_id"):
+        return redirect(url_for("dashboard.index"))
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        role = request.form.get("role", "member")
+        if role not in ("manager", "member"):
+            role = "member"
+        if not name or not email or not password:
+            flash("All fields are required.", "danger")
+        elif UserModel.query.filter_by(email=email).first():
+            flash("Email already registered.", "danger")
+        else:
+            user = UserModel(name=name, email=email, role=role)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            session["user_id"] = user.id
+            session["user_name"] = user.name
+            session["user_role"] = user.role
+            return redirect(url_for("dashboard.index"))
+    return render_template("signup.html")
 
 
-@auth_bp.route('/logout')
+@auth_bp.route("/logout")
 def logout():
     session.clear()
-    flash('Logged out successfully', 'success')
-    return redirect(url_for('auth.login'))
+    return redirect(url_for("auth.landing"))

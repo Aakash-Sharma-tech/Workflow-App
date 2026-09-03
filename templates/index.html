@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow — Project & Task Tracking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-light">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-layer-group me-2"></i>Workflow</a>
+            <div>
+                <a href="{{ url_for('auth.login') }}" class="btn btn-outline-gold me-2">Sign In</a>
+                <a href="{{ url_for('auth.signup') }}" class="btn btn-gold">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-3">One place for <span class="highlight">every project</span></h1>
+            <p class="lead text-muted mb-4 mx-auto" style="max-width:640px">
+                Track tasks, manage deadlines, and keep your team aligned — without the spreadsheet chaos.
+            </p>
+            <a href="{{ url_for('auth.signup') }}" class="btn btn-gold btn-lg me-2">Start Free</a>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-outline-gold btn-lg">Sign In</a>
+        </div>
+    </section>
+
+    <section class="py-5">
+        <div class="container">
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="d-flex gap-3">
+                        <div class="feature-icon"><i class="fas fa-project-diagram"></i></div>
+                        <div>
+                            <h5>Project Portfolio</h5>
+                            <p class="text-muted mb-0">Managers set up projects, assign teams, and see everything at a glance.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex gap-3">
+                        <div class="feature-icon"><i class="fas fa-route"></i></div>
+                        <div>
+                            <h5>Task Lifecycle</h5>
+                            <p class="text-muted mb-0">Backlog to Done with enforced rules, dependencies, and audit history.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex gap-3">
+                        <div class="feature-icon"><i class="fas fa-bell"></i></div>
+                        <div>
+                            <h5>Overdue Alerts</h5>
+                            <p class="text-muted mb-0">Never miss a deadline — see what's overdue and who's overloaded.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>&copy; 2026 Workflow — Internship Assessment Project</footer>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

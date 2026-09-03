@@ -1,84 +1,61 @@
-"""
-AlertService — manages overdue alerts with reappearance support.
-
-Design decisions:
-1. Alerts are never deleted; dismissed_at marks dismissal.
-2. Reappearance: if task.due_date changes after dismissal, the old alert
-   no longer matches (due_date_at_creation != task.due_date) so a new
-   alert row is created — the user sees the alert again.
-3. Uniqueness is (task_id, user_id, due_date_at_creation) in practice,
-   enforced by the create logic rather than a DB constraint, so we can
-   create a new row on each due-date cycle.
-"""
-
-from datetime import datetime
+from datetime import date, datetime
+from models import db
 from models.alerts import AlertModel
 from models.tasks import TaskModel
 from models.task_assignees import TaskAssigneeModel
-from models import db
 
 
-def get_active_for_user(user_id):
-    """
-    Return all active (undismissed) alerts for this user.
-    Also creates new alerts for any newly-overdue tasks.
-    """
-    now = datetime.now()
+def sync_alerts_for_task(task):
+    if not task.due_date or task.status == "Done" or task.due_date >= date.today():
+        AlertModel.query.filter_by(task_id=task.id).delete()
+        return
 
-    # Find all tasks assigned to this user that are overdue and not done
-    assigned_task_ids = [
-        a.task_id for a in TaskAssigneeModel.query.filter_by(user_id=user_id).all()
-    ]
+    assignee_ids = [a.user_id for a in task.assignees]
+    existing = {a.user_id: a for a in AlertModel.query.filter_by(task_id=task.id).all()}
 
-    overdue_tasks = TaskModel.query.filter(
-        TaskModel.id.in_(assigned_task_ids),
-        TaskModel.due_date < now,
-        TaskModel.status != "Done",
-    ).all()
+    for uid in assignee_ids:
+        if uid in existing:
+            alert = existing[uid]
+            if alert.dismissed_at and alert.due_date_snapshot != task.due_date:
+                alert.dismissed_at = None
+                alert.due_date_snapshot = task.due_date
+        else:
+            db.session.add(AlertModel(
+                task_id=task.id,
+                user_id=uid,
+                due_date_snapshot=task.due_date,
+            ))
 
-    # For each overdue task, ensure an active alert exists for this cycle
-    for task in overdue_tasks:
-        _get_or_create_alert(task, user_id)
-
-    # Return all undismissed alerts for this user
-    return AlertModel.query.filter_by(user_id=user_id, dismissed_at=None).all()
+    for uid, alert in existing.items():
+        if uid not in assignee_ids:
+            db.session.delete(alert)
 
 
-def dismiss(alert_id, user_id):
-    """
-    Dismiss an alert. User can only dismiss their own alerts.
-    Returns (alert, error).
-    """
+def dismiss_alert(alert_id, user):
     alert = AlertModel.query.get(alert_id)
-    if not alert:
-        return None, "Alert not found"
-    if alert.user_id != user_id:
-        return None, "Cannot dismiss another user's alert"
-    if alert.dismissed_at:
-        return alert, None   # already dismissed — idempotent
-
-    alert.dismissed_at = datetime.now()
+    if not alert or alert.user_id != user.id:
+        return False, "Alert not found or not yours."
+    from datetime import datetime
+    alert.dismissed_at = datetime.utcnow()
+    alert.due_date_snapshot = alert.task.due_date
     db.session.commit()
-    return alert, None
+    return True, None
 
 
-def _get_or_create_alert(task, user_id):
-    """
-    Find an active alert for this (task, user, due_date) combination.
-    If none exists (first time overdue, or due date changed), create one.
-    """
-    active = AlertModel.query.filter_by(
-        task_id=task.id,
-        user_id=user_id,
-        dismissed_at=None,
-        due_date_at_creation=task.due_date,
-    ).first()
+def get_active_alerts(user):
+    alerts = (
+        AlertModel.query.filter_by(user_id=user.id)
+        .join(TaskModel)
+        .filter(TaskModel.status != "Done")
+        .filter(AlertModel.dismissed_at.is_(None))
+        .all()
+    )
+    active = []
+    for a in alerts:
+        if a.task and a.task.is_overdue:
+            active.append(a)
+    return active
 
-    if not active:
-        alert = AlertModel(
-            task_id=task.id,
-            user_id=user_id,
-            due_date_at_creation=task.due_date,
-        )
-        db.session.add(alert)
-        db.session.commit()
+
+def get_alert_count(user):
+    return len(get_active_alerts(user))

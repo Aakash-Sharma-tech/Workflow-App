@@ -1,5 +1,5 @@
-from models import db
 from datetime import datetime
+from models import db
 
 
 class AlertModel(db.Model):
@@ -8,19 +8,20 @@ class AlertModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    due_date_at_creation = db.Column(db.DateTime, nullable=True)  # snapshot of task.due_date when alert was created
-    dismissed_at = db.Column(db.DateTime, nullable=True)          # NULL = active alert
-    created_at = db.Column(db.DateTime, nullable=False)
+    dismissed_at = db.Column(db.DateTime, nullable=True)
+    due_date_snapshot = db.Column(db.Date, nullable=True)
 
-    # many-to-one back to user — backref gives UserModel.alerts
-    # task backref is created by TaskModel.alerts
-    user = db.relationship("UserModel", backref="alerts", lazy=True)
+    __table_args__ = (db.UniqueConstraint("task_id", "user_id", name="uq_alert_task_user"),)
 
-    def __init__(self, task_id, user_id, due_date_at_creation=None):
-        self.task_id = task_id
-        self.user_id = user_id
-        self.due_date_at_creation = due_date_at_creation
-        self.created_at = datetime.now()
+    task = db.relationship("TaskModel", back_populates="alerts")
+    user = db.relationship("UserModel", back_populates="alerts")
 
-    def __repr__(self):
-        return f"<AlertModel {self.id}>"
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "task_title": self.task.title if self.task else None,
+            "project_name": self.task.project.name if self.task and self.task.project else None,
+            "due_date": self.task.due_date.isoformat() if self.task and self.task.due_date else None,
+            "dismissed_at": self.dismissed_at.isoformat() if self.dismissed_at else None,
+        }

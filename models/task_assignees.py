@@ -1,5 +1,6 @@
-from models import db
 from datetime import datetime
+from models import db
+
 
 class TaskAssigneeModel(db.Model):
     __tablename__ = "task_assignees"
@@ -7,18 +8,9 @@ class TaskAssigneeModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    assigned_at = db.Column(db.DateTime, nullable=False)
-    updated_at = db.Column(db.DateTime, nullable=False)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    #relationships
-    task = db.relationship("TaskModel", backref="assignees", lazy=True)
-    user = db.relationship("UserModel", backref="tasks_assigned", lazy=True)
+    __table_args__ = (db.UniqueConstraint("task_id", "user_id", name="uq_task_assignee"),)
 
-    def __init__(self, task_id, user_id):
-        self.task_id = task_id
-        self.user_id = user_id
-        self.assigned_at = datetime.now()
-        self.updated_at = datetime.now()
-
-    def __repr__(self):
-        return f"<TaskAssignee {self.task_id} {self.user_id}>"
+    task = db.relationship("TaskModel", back_populates="assignees")
+    user = db.relationship("UserModel", back_populates="assignments")

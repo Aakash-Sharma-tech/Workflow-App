@@ -1,5 +1,8 @@
+from datetime import datetime, date
 from models import db
-from datetime import datetime
+
+TASK_STATUSES = ["Backlog", "In Progress", "In Review", "Done", "Blocked"]
+TASK_PRIORITIES = ["Low", "Medium", "High", "Critical"]
 
 
 class TaskModel(db.Model):
@@ -7,58 +10,53 @@ class TaskModel(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
-    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    title = db.Column(db.String(80), nullable=False)
-    description = db.Column(db.String(255), nullable=False)
-    priority = db.Column(db.Enum("Critical", "High", "Medium", "Low"), nullable=False, default="Medium")
-    status = db.Column(
-        db.Enum("Backlog", "In Progress", "In Review", "Blocked", "Done"),
-        nullable=False,
-        default="Backlog"
-    )
-    due_date = db.Column(db.DateTime, nullable=True)
-    blocked_from_status = db.Column(db.String(20), nullable=True)  # stores previous status when task is Blocked
-    completed_at = db.Column(db.DateTime, nullable=True)           # set when status → Done; cleared on reopen
-    created_at = db.Column(db.DateTime, nullable=False)
-    updated_at = db.Column(db.DateTime, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default="")
+    priority = db.Column(db.String(20), default="Medium", nullable=False)
+    status = db.Column(db.String(20), default="Backlog", nullable=False)
+    due_date = db.Column(db.Date, nullable=True)
+    blocked_from_status = db.Column(db.String(20), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # many-to-one — who created this task (foreign_keys required since project also FK's users via owner)
-    creator = db.relationship("UserModel", foreign_keys=[created_by], backref="tasks_created", lazy=True)
+    project = db.relationship("ProjectModel", back_populates="tasks")
+    assignees = db.relationship("TaskAssigneeModel", back_populates="task", cascade="all, delete-orphan")
+    comments = db.relationship("CommentModel", back_populates="task", cascade="all, delete-orphan")
+    history = db.relationship("TaskHistoryModel", back_populates="task", cascade="all, delete-orphan")
+    alerts = db.relationship("AlertModel", back_populates="task", cascade="all, delete-orphan")
 
-    # one-to-many — task owns its children (cascade deletes children when task deleted)
-    assignees = db.relationship("TaskAssigneeModel", backref="task", lazy=True, cascade="all, delete-orphan")
-    history = db.relationship("TaskHistoryModel", backref="task", lazy=True, cascade="all, delete-orphan")
-    comments = db.relationship("CommentModel", backref="task", lazy=True, cascade="all, delete-orphan")
-    alerts = db.relationship("AlertModel", backref="task", lazy=True, cascade="all, delete-orphan")
-
-    # self-referential M:N via task_dependencies
-    # tasks this task is blocked BY (this task_id, blocking_task_id = blocker)
-    dependencies = db.relationship(
+    blocking_deps = db.relationship(
         "TaskDependencyModel",
         foreign_keys="TaskDependencyModel.task_id",
-        backref="blocked_task",
-        lazy=True,
-        cascade="all, delete-orphan"
-    )
-    # tasks that this task is BLOCKING (this task = blocking_task_id)
-    dependents = db.relationship(
-        "TaskDependencyModel",
-        foreign_keys="TaskDependencyModel.blocking_task_id",
-        backref="blocker_task",
-        lazy=True
+        back_populates="task",
+        cascade="all, delete-orphan",
     )
 
-    def __init__(self, title, description, status, project_id, created_by, priority, due_date=None):
-        self.title = title
-        self.description = description
-        self.status = status
-        self.project_id = project_id
-        self.created_by = created_by
-        self.priority = priority
-        self.due_date = due_date
-        self.completed_at = None
-        self.created_at = datetime.now()
-        self.updated_at = datetime.now()
+    @property
+    def is_overdue(self):
+        if not self.due_date or self.status == "Done":
+            return False
+        return self.due_date < date.today()
 
-    def __repr__(self):
-        return f"<TaskModel {self.title}>"
+    def to_dict(self, include_assignees=True):
+        data = {
+            "id": self.id,
+            "project_id": self.project_id,
+            "project_key": self.project.key if self.project else None,
+            "project_name": self.project.name if self.project else None,
+            "title": self.title,
+            "description": self.description,
+            "priority": self.priority,
+            "status": self.status,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "blocked_from_status": self.blocked_from_status,
+            "is_overdue": self.is_overdue,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_assignees:
+            data["assignees"] = [
+                {"id": a.user.id, "name": a.user.name, "email": a.user.email}
+                for a in self.assignees
+            ]
+        return data

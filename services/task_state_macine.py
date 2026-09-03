@@ -1,104 +1,63 @@
-"""
-TaskStateMachine — enforces lifecycle rules and records history atomically.
+VALID_TRANSITIONS = {
+    "Backlog": ["In Progress"],
+    "In Progress": ["In Review", "Blocked"],
+    "In Review": ["Done", "Blocked"],
+    "Blocked": [],
+    "Done": ["In Progress"],
+}
 
-Valid transitions:
-    Backlog     → In Progress
-    In Progress → In Review | Blocked
-    In Review   → Done | Blocked
-    Blocked     → Unblock (returns to blocked_from_status)
-    Done        → In Progress  (reopen)
-
-Design decision: status changes go through this class, not update_task(),
-so the same rules apply from both normal updates and bulk operations.
-"""
-
-from datetime import datetime
-from models import db
-import services.history_service as history_service
+FINISHED_STATUS = "Done"
 
 
-class TaskStateMachine:
-    TRANSITIONS = {
-        "Backlog":     ["In Progress"],
-        "In Progress": ["In Review", "Blocked"],
-        "In Review":   ["Done", "Blocked"],
-        "Blocked":     [],          # only "Unblock" is valid (special-cased below)
-        "Done":        ["In Progress"],
-    }
+def get_allowed_transitions(task):
+    status = task.status
+    if status == "Blocked":
+        if task.blocked_from_status:
+            return [task.blocked_from_status]
+        return ["In Progress", "In Review"]
+    return list(VALID_TRANSITIONS.get(status, []))
 
-    def __init__(self, task):
-        self.task = task
 
-    @property
-    def state(self):
-        return self.task.status
+def validate_transition(task, new_status):
+    current = task.status
 
-    def change_state(self, new_state, acting_user_id):
-        """
-        Transition task to new_state.
-        Stages history and updates completed_at; caller must not commit before calling.
-        Returns (success: bool, error: str | None).
-        """
-        current = self.task.status
-        old_status = current
+    if new_status == current:
+        return False, "Task is already in this status."
 
-        # ── Unblock ──────────────────────────────────────────────────────────
-        if new_state == "Unblock":
-            if current != "Blocked":
-                return False, "Task is not blocked"
-            previous = self.task.blocked_from_status
-            if not previous:
-                return False, "No previous state recorded — cannot unblock"
-            self.task.status = previous
-            self.task.blocked_from_status = None
-            self.task.updated_at = datetime.now()
-            history_service.record(
-                db.session, self.task.id, acting_user_id,
-                action="status_changed",
-                field_name="status",
-                old_value=old_status,
-                new_value=previous,
-            )
-            db.session.commit()
-            return True, None
-
-        # ── Validate transition ───────────────────────────────────────────────
-        if current == "Blocked":
-            return False, "Blocked tasks can only be 'Unblocked'"
-
-        allowed = self.TRANSITIONS.get(current, [])
-        if new_state not in allowed:
-            return False, f"Cannot move from '{current}' to '{new_state}'. Allowed: {allowed}"
-
-        # ── Apply ─────────────────────────────────────────────────────────────
-        if new_state == "Blocked":
-            self.task.blocked_from_status = current
-
-        if new_state == "Done":
-            self.task.completed_at = datetime.now()
-        elif current == "Done":
-            # Reopening — clear completion timestamp
-            self.task.completed_at = None
-
-        self.task.status = new_state
-        self.task.updated_at = datetime.now()
-
-        history_service.record(
-            db.session, self.task.id, acting_user_id,
-            action="status_changed",
-            field_name="status",
-            old_value=old_status,
-            new_value=new_state,
-        )
-        db.session.commit()
+    if current == "Blocked":
+        if new_status != task.blocked_from_status:
+            return False, f"Blocked task can only return to '{task.blocked_from_status}'."
         return True, None
 
-    def can_transition_to(self, new_state):
-        if self.task.status == "Blocked":
-            return new_state == "Unblock"
-        return new_state in self.TRANSITIONS.get(self.task.status, [])
+    if new_status == "Blocked":
+        if current not in ("In Progress", "In Review"):
+            return False, "Only tasks In Progress or In Review can be blocked."
+        return True, None
 
-    def get_allowed_transitions(self):
-        if self.task.status == "Blocked":
-            return ["Unblock"]
-        return self.TRANSITIONS.get(self.task.status, [])
+    allowed = VALID_TRANSITIONS.get(current, [])
+    if new_status not in allowed:
+        return False, f"Cannot move from '{current}' to '{new_status}'. Allowed: {', '.join(allowed) or 'none'}."
+
+    if new_status == "Done":
+        blockers = [d.blocking_task for d in task.blocking_deps]
+        unfinished = [b for b in blockers if b.status != FINISHED_STATUS]
+        if unfinished:
+            titles = ", ".join(b.title for b in unfinished)
+            return False, f"Cannot complete task while blocked by unfinished tasks: {titles}."
+
+    return True, None
+
+
+def apply_transition(task, new_status):
+    current = task.status
+
+    if new_status == "Blocked":
+        task.blocked_from_status = current
+        task.status = "Blocked"
+    elif current == "Blocked" and new_status == task.blocked_from_status:
+        task.status = new_status
+        task.blocked_from_status = None
+    else:
+        task.status = new_status
+
+    return task

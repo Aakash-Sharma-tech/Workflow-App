@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Tasks — Workflow{% endblock %}
+{% block content %}
+<div id="tasks-app">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="mb-0">Tasks</h2>
+        <a :href="exportUrl" class="btn btn-outline-gold btn-sm"><i class="fas fa-download me-1"></i> Export CSV</a>
+    </div>
+
+    <div class="filter-bar">
+        <div class="filter-grid">
+            <div class="filter-search">
+                <label class="form-label small mb-1">Search</label>
+                <input v-model="filters.search" @input="debouncedLoad" class="form-control" placeholder="Title or description">
+            </div>
+            <div>
+                <label class="form-label small mb-1">Project</label>
+                <select v-model="filters.project_id" @change="loadTasks()" class="form-select">
+                    <option value="">All projects</option>
+                    {% for p in projects %}<option value="{{ p.id }}">{{ p.key }} — {{ p.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Status</label>
+                <select v-model="filters.status" @change="loadTasks()" class="form-select">
+                    <option value="">All statuses</option>
+                    {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Priority</label>
+                <select v-model="filters.priority" @change="loadTasks()" class="form-select">
+                    <option value="">All priorities</option>
+                    {% for p in priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Assignee</label>
+                <select v-model="filters.assignee_id" @change="loadTasks()" class="form-select">
+                    <option value="">All assignees</option>
+                    {% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Sort</label>
+                <select v-model="filters.sort" @change="loadTasks()" class="form-select">
+                    <option value="updated_at">Last updated</option>
+                    <option value="due_date">Due date</option>
+                    <option value="priority">Priority</option>
+                    <option value="title">Title</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Order</label>
+                <select v-model="filters.order" @change="loadTasks()" class="form-select">
+                    <option value="desc">Newest first</option>
+                    <option value="asc">Oldest first</option>
+                </select>
+            </div>
+            <div class="d-flex align-items-end pb-1">
+                <div class="form-check">
+                    <input type="checkbox" v-model="filters.overdue" @change="loadTasks()" class="form-check-input" id="overdueCheck">
+                    <label class="form-check-label" for="overdueCheck">Overdue only</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="selected.length" class="bulk-panel mb-3 d-flex align-items-center flex-wrap gap-2">
+        <span><strong>[[ selected.length ]]</strong> selected</span>
+        <select v-model="bulkAction" class="form-select form-select-sm" style="width:auto">
+            <option value="">Bulk action…</option>
+            <option value="status">Change status</option>
+            <option value="due_date">Set due date</option>
+        </select>
+        <select v-if="bulkAction === 'status'" v-model="bulkStatus" class="form-select form-select-sm" style="width:auto">
+            {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+        <input v-if="bulkAction === 'due_date'" type="date" v-model="bulkDueDate" class="form-control form-control-sm" style="width:auto">
+        <button class="btn btn-gold btn-sm" @click="runBulk">Apply</button>
+    </div>
+
+    <div v-if="bulkResults" v-cloak class="alert alert-info">
+        Bulk: [[ bulkResults.summary.succeeded ]] succeeded, [[ bulkResults.summary.failed ]] failed.
+        <ul class="mb-0 mt-1 small">
+            <li v-for="r in bulkResults.results.filter(x => !x.success)" :key="r.task_id">Task [[ r.task_id ]]: [[ r.error ]]</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th width="40"><input type="checkbox" @change="toggleAll" :checked="allSelected"></th>
+                        <th>Title</th><th>Project</th><th>Status</th><th>Priority</th><th>Due</th><th>Assignees</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="t in tasks" :key="t.id" :class="{'overdue-row': t.is_overdue}">
+                        <td><input type="checkbox" class="task-checkbox" :value="t.id" v-model="selected"></td>
+                        <td><a :href="'/tasks/' + t.id">[[ t.title ]]</a></td>
+                        <td><span class="badge bg-secondary">[[ t.project_key ]]</span></td>
+                        <td><span class="badge" :data-status="t.status">[[ t.status ]]</span></td>
+                        <td><span class="badge" :data-priority="t.priority">[[ t.priority ]]</span></td>
+                        <td>[[ t.due_date || '—' ]]</td>
+                        <td>[[ t.assignees.map(a => a.name).join(', ') || '—' ]]</td>
+                    </tr>
+                    <tr v-if="!tasks.length"><td colspan="7" class="text-center text-muted py-4">No tasks match your filters.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+        <span class="pagination-info">[[ total ]] tasks — page [[ page ]] of [[ pages ]]</span>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary" :disabled="page <= 1" @click="goPage(page - 1)">Prev</button>
+            <button class="btn btn-sm btn-outline-secondary" :disabled="page >= pages" @click="goPage(page + 1)">Next</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const { createApp } = Vue;
+let debounceTimer;
+createApp({
+    delimiters: ['[[', ']]'],
+    data() {
+        const params = new URLSearchParams(location.search);
+        return {
+            tasks: [], total: 0, page: 1, pages: 1,
+            selected: [],
+            filters: {
+                search: params.get('search') || '',
+                project_id: params.get('project_id') || '',
+                status: params.get('status') || '',
+                priority: params.get('priority') || '',
+                assignee_id: params.get('assignee_id') || '',
+                overdue: params.get('overdue') === 'true',
+                my_tasks: params.get('my_tasks') === 'true',
+                sort: params.get('sort') || 'updated_at',
+                order: params.get('order') || 'desc',
+            },
+            bulkAction: '', bulkStatus: 'In Progress', bulkDueDate: '', bulkResults: null,
+        };
+    },
+    computed: {
+        allSelected() { return this.tasks.length && this.selected.length === this.tasks.length; },
+        exportUrl() {
+            const q = new URLSearchParams();
+            Object.entries(this.filters).forEach(([k, v]) => { if (v) q.set(k, v); });
+            return '/api/tasks/export?' + q.toString();
+        }
+    },
+    mounted() { this.loadTasks(); },
+    methods: {
+        debouncedLoad() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => this.loadTasks(), 300);
+        },
+        queryString(page) {
+            const q = new URLSearchParams();
+            Object.entries(this.filters).forEach(([k, v]) => {
+                if (v === true) q.set(k, 'true');
+                else if (v) q.set(k, v);
+            });
+            q.set('page', page || this.page);
+            return q.toString();
+        },
+        async loadTasks(page) {
+            if (typeof page === 'number') this.page = page;
+            const data = await api.get('/api/tasks?' + this.queryString());
+            this.tasks = data.tasks;
+            this.total = data.total;
+            this.page = data.page;
+            this.pages = data.pages;
+            this.selected = [];
+        },
+        goPage(p) { this.loadTasks(p); },
+        toggleAll(e) { this.selected = e.target.checked ? this.tasks.map(t => t.id) : []; },
+        async runBulk() {
+            if (!this.selected.length || !this.bulkAction) return;
+            const payload = {};
+            if (this.bulkAction === 'status') payload.status = this.bulkStatus;
+            if (this.bulkAction === 'due_date') payload.due_date = this.bulkDueDate;
+            this.bulkResults = await api.post('/api/tasks/bulk', {
+                task_ids: this.selected, action: this.bulkAction, payload
+            });
+            this.loadTasks();
+        }
+    }
+}).mount('#tasks-app');
+</script>
+{% endblock %}

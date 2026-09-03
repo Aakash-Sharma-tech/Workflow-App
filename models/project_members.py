@@ -1,5 +1,5 @@
-from models import db
 from datetime import datetime
+from models import db
 
 
 class ProjectMemberModel(db.Model):
@@ -8,18 +8,9 @@ class ProjectMemberModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    joined_at = db.Column(db.DateTime, nullable=False)
-    updated_at = db.Column(db.DateTime, nullable=False)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # many-to-one back to user — backref "memberships" on UserModel
-    # "project" backref is created by ProjectModel.members (defined in projects.py)
-    user = db.relationship("UserModel", backref="memberships", lazy=True)
+    __table_args__ = (db.UniqueConstraint("project_id", "user_id", name="uq_project_member"),)
 
-    def __init__(self, project_id, user_id):
-        self.project_id = project_id
-        self.user_id = user_id
-        self.joined_at = datetime.now()
-        self.updated_at = datetime.now()
-
-    def __repr__(self):
-        return f"<ProjectMemberModel project={self.project_id} user={self.user_id}>"
+    project = db.relationship("ProjectModel", back_populates="members")
+    user = db.relationship("UserModel", back_populates="memberships")

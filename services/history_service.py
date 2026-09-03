@@ -1,38 +1,84 @@
-"""
-HistoryService — single point of truth for audit trail creation.
-
-Usage (always call inside the caller's transaction, never commit here):
-
-    history_service.record(
-        db.session,
-        task_id=task.id,
-        user_id=user_id,
-        action="status_changed",
-        field_name="status",
-        old_value="In Progress",
-        new_value="Done",
-    )
-    db.session.commit()   # caller commits ONCE, covering task + history
-
-This guarantees the audit entry and the task change are atomic.
-"""
-
+from datetime import datetime
+from models import db
 from models.task_history import TaskHistoryModel
 
 
-def record(session, task_id, user_id, action,
-           field_name=None, old_value=None, new_value=None):
-    """
-    Stage a history entry in the current session.
-    Does NOT commit — caller is responsible for the commit.
-    """
+def record_creation(task, user):
     entry = TaskHistoryModel(
-        task_id=task_id,
-        user_id=user_id,
-        action=action,
+        task_id=task.id,
+        user_id=user.id,
+        action_type="created",
+        new_value=task.title,
+    )
+    db.session.add(entry)
+
+
+def record_field_change(task, user, field_name, old_value, new_value):
+    if str(old_value) == str(new_value):
+        return
+    entry = TaskHistoryModel(
+        task_id=task.id,
+        user_id=user.id,
+        action_type="field_change",
         field_name=field_name,
         old_value=str(old_value) if old_value is not None else None,
         new_value=str(new_value) if new_value is not None else None,
     )
-    session.add(entry)
-    return entry
+    db.session.add(entry)
+
+
+def record_status_change(task, user, old_status, new_status):
+    entry = TaskHistoryModel(
+        task_id=task.id,
+        user_id=user.id,
+        action_type="status_change",
+        field_name="status",
+        old_value=old_status,
+        new_value=new_status,
+    )
+    db.session.add(entry)
+
+
+def record_assignment(task, user, assignee_name):
+    entry = TaskHistoryModel(
+        task_id=task.id,
+        user_id=user.id,
+        action_type="assigned",
+        new_value=assignee_name,
+    )
+    db.session.add(entry)
+
+
+def record_unassignment(task, user, assignee_name):
+    entry = TaskHistoryModel(
+        task_id=task.id,
+        user_id=user.id,
+        action_type="unassigned",
+        old_value=assignee_name,
+    )
+    db.session.add(entry)
+
+
+def get_task_timeline(task):
+    history = (
+        TaskHistoryModel.query.filter_by(task_id=task.id)
+        .order_by(TaskHistoryModel.created_at.desc())
+        .all()
+    )
+    comments = sorted(task.comments, key=lambda c: c.created_at, reverse=True)
+
+    timeline = []
+    for h in history:
+        item = h.to_dict()
+        item["type"] = "history"
+        item["timestamp"] = h.created_at.isoformat()
+        timeline.append(item)
+
+    for c in comments:
+        item = c.to_dict()
+        item["type"] = "comment"
+        item["timestamp"] = c.created_at.isoformat()
+        timeline.append(item)
+
+    timeline.sort(key=lambda x: x["timestamp"], reverse=True)
+    return timeline

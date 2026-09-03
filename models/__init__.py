@@ -1,16 +1,13 @@
-from flask_sqlalchemy import SQLAlchemy 
+from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-from .user import UserModel
-from .projects import ProjectModel
-from .tasks import TaskModel
-from .task_assignees import TaskAssigneeModel
-from .task_dependencies import TaskDependencyModel
-from .task_history import TaskHistoryModel
-from .comments import CommentModel
-from .alerts import AlertModel
-from .project_members import ProjectMemberModel
-from .user import UserModel
-
-__all__ = ['db', 'UserModel', 'ProjectModel', 'TaskModel', 'TaskAssigneeModel', 'TaskDependencyModel', 'TaskHistoryModel', 'CommentModel', 'AlertModel', 'ProjectMemberModel']
+from models.user import UserModel
+from models.projects import ProjectModel
+from models.project_members import ProjectMemberModel
+from models.tasks import TaskModel
+from models.task_assignees import TaskAssigneeModel
+from models.task_dependencies import TaskDependencyModel
+from models.task_history import TaskHistoryModel
+from models.comments import CommentModel
+from models.alerts import AlertModel

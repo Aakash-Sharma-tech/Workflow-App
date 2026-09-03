@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Workflow{% endblock %}
+{% block content %}
+<div id="dashboard-app">
+    <h2 class="mb-4">Dashboard</h2>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card p-3">
+                <div class="text-muted small">Open Tasks</div>
+                <div class="stat-value">{{ dashboard.headlines.open_tasks }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card overdue p-3">
+                <div class="text-muted small">Overdue</div>
+                <div class="stat-value">{{ dashboard.headlines.overdue_tasks }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card p-3">
+                <div class="text-muted small">Due This Week</div>
+                <div class="stat-value">{{ dashboard.headlines.due_this_week }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card p-3">
+                <div class="text-muted small">Completed This Week</div>
+                <div class="stat-value">{{ dashboard.headlines.completed_this_week }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">By Status</div>
+                <div class="card-body">
+                    {% for status, count in dashboard.by_status.items() %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="badge" data-status="{{ status }}">{{ status }}</span>
+                        <strong>{{ count }}</strong>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No tasks yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Open Tasks by Assignee</div>
+                <div class="card-body">
+                    {% for item in dashboard.by_assignee %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>{{ item.name }}</span>
+                        <strong>{{ item.count }}</strong>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No assignments yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Completions (8 weeks)</div>
+                <div class="card-body">
+                    <div class="d-flex align-items-end gap-1" style="height:120px">
+                        {% set max_count = dashboard.completions|map(attribute='count')|max if dashboard.completions else 1 %}
+                        {% for week in dashboard.completions %}
+                        <div class="flex-fill text-center">
+                            <div class="chart-bar mx-auto" style="height:{{ (week.count / (max_count or 1)) * 100 }}px; width:80%"></div>
+                            <small class="text-muted d-block mt-1" style="font-size:0.65rem">{{ week.label }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
